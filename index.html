@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meditazione Quotidiana</title>
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-amber-900 via-orange-900 to-red-900 flex items-center justify-center min-h-screen">
+  <div id="root" class="w-full max-w-2xl p-4"></div>
+
+  <!-- React + ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+
+    const { useState, useEffect, useRef } = React;
+
+    const MeditationTimer = () => {
+      import React, { useState, useEffect, useRef } from 'react';
+import { Play, Pause, SkipForward, Settings, Upload, Bell } from 'lucide-react';
+
+// Tipi
+interface Phase {
+  id: number;
+  name: string;
+  duration: number; // in secondi
+  type: 'bell' | 'silence' | 'audio' | 'threeBells';
+}
+
+const MeditationTimer = () => {
+  // Fasi predefinite
+  const defaultPhases: Phase[] = [
+    { id: 0, name: 'Campana iniziale', duration: 3, type: 'bell' },
+    { id: 1, name: 'Consapevolezza del respiro', duration: 120, type: 'silence' },
+    { id: 2, name: 'Presa di rifugio', duration: 60, type: 'silence' },
+    { id: 3, name: 'Motivazione', duration: 60, type: 'silence' },
+    { id: 4, name: 'Ascolto audio MP3', duration: 450, type: 'audio' },
+    { id: 5, name: 'Meditazione in silenzio', duration: 300, type: 'silence' },
+    { id: 6, name: 'Campane finali', duration: 5, type: 'threeBells' }
+  ];
+
+  const [phases, setPhases] = useState<Phase[]>(defaultPhases);
+  const [currentPhaseIndex, setCurrentPhaseIndex] = useState<number>(-1);
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  
+  const audioRef = useRef<HTMLAudioElement>(null);
+  //const bellAudioRef = useRef<HTMLAudioElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  //const [audioError, setAudioError] = useState<string | null>(null);
+
+  // Genera suono campana
+  const generateBellSound = () => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    
+    const ctx = audioContextRef.current;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.frequency.value = 528; // Frequenza Do centrale
+    osc.type = 'sine';
+    
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 2);
+    
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 2);
+  };
+
+  // Gestione upload audio
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Accetta tutti i file audio o file con estensione audio comune
+      const isAudio = file.type.startsWith('audio/') || 
+                      file.name.match(/\.(mp3|ogg|wav|m4a|opus)$/i);
+      
+      if (isAudio) {
+        setAudioFile(file);
+        const url = URL.createObjectURL(file);
+        setAudioUrl(url);
+      } else {
+        alert('Per favore carica un file audio valido (MP3, OGG, WAV, M4A)');
+      }
+    }
+  };
+
+  // Inizia meditazione
+  const startMeditation = () => {
+    if (currentPhaseIndex === -1) {
+      setCurrentPhaseIndex(0);
+      setTimeLeft(phases[0].duration);
+    }
+    setIsRunning(true);
+  };
+
+  // Pausa/Resume
+  const togglePause = () => {
+    setIsRunning(!isRunning);
+    if (audioRef.current && phases[currentPhaseIndex]?.type === 'audio') {
+      if (isRunning) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play();
+      }
+    }
+  };
+
+  // Salta fase
+  const skipPhase = () => {
+    if (currentPhaseIndex < phases.length - 1) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+      const nextIndex = currentPhaseIndex + 1;
+      setCurrentPhaseIndex(nextIndex);
+      setTimeLeft(phases[nextIndex].duration);
+    }
+  };
+
+  // Reset
+  const resetMeditation = () => {
+    setIsRunning(false);
+    setCurrentPhaseIndex(-1);
+    setTimeLeft(0);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  };
+
+  // Timer principale
+  useEffect(() => {
+    if (!isRunning || currentPhaseIndex === -1) return;
+
+    const currentPhase = phases[currentPhaseIndex];
+
+    // Gestione campane e audio
+    if (timeLeft === currentPhase.duration) {
+      if (currentPhase.type === 'bell') {
+        generateBellSound();
+      } else if (currentPhase.type === 'threeBells') {
+        generateBellSound();
+        setTimeout(() => generateBellSound(), 1000);
+        setTimeout(() => generateBellSound(), 2000);
+      } else if (currentPhase.type === 'audio' && audioRef.current && audioUrl) {
+        audioRef.current.play();
+      }
+    }
+
+    const interval = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          // Fase completata
+          if (currentPhaseIndex < phases.length - 1) {
+            const nextIndex = currentPhaseIndex + 1;
+            setCurrentPhaseIndex(nextIndex);
+            return phases[nextIndex].duration;
+          } else {
+            // Meditazione completata
+            setIsRunning(false);
+            return 0;
+          }
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isRunning, currentPhaseIndex, timeLeft, phases, audioUrl]);
+
+  // Formatta tempo
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Aggiorna durata fase
+  const updatePhaseDuration = (id: number, duration: number) => {
+    setPhases(phases.map(p => 
+      p.id === id ? { ...p, duration } : p
+    ));
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-amber-900 via-orange-900 to-red-900 flex items-center justify-center p-4">
+      <div className="bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-8 max-w-2xl w-full border border-amber-700/30">
+        <h1 className="text-4xl font-bold text-amber-50 text-center mb-8 flex items-center justify-center gap-3">
+          <Bell className="w-10 h-10 text-yellow-600" />
+          Meditazione Quotidiana
+        </h1>
+
+        {/* Upload Audio */}
+        {!audioFile && currentPhaseIndex === -1 && (
+          <div className="mb-8 bg-amber-950/30 rounded-xl p-6 border-2 border-dashed border-yellow-700/50">
+            <label className="flex flex-col items-center cursor-pointer">
+              <Upload className="w-12 h-12 text-amber-200/70 mb-3" />
+              <span className="text-amber-50 text-lg mb-2">Carica l'audio di oggi</span>
+              <span className="text-amber-200/70 text-sm">MP3, OGG, WAV, M4A supportati</span>
+              <input
+                type="file"
+                accept="audio/*,.ogg,.opus"
+                onChange={handleAudioUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
+        )}
+
+        {audioFile && (
+          <div className="mb-6 bg-yellow-700/30 rounded-lg p-4 text-amber-50 border border-yellow-700/50">
+            ✓ Audio caricato: {audioFile.name}
+          </div>
+        )}
+
+        {/* Display Timer */}
+        {currentPhaseIndex >= 0 && (
+          <div className="text-center mb-8">
+            <div className="text-6xl font-bold text-amber-50 mb-4">
+              {formatTime(timeLeft)}
+            </div>
+            <div className="text-2xl text-amber-100 mb-2">
+              {phases[currentPhaseIndex]?.name}
+            </div>
+            <div className="text-amber-200/70">
+              Fase {currentPhaseIndex + 1} di {phases.length}
+            </div>
+            <div className="w-full bg-amber-950/40 rounded-full h-2 mt-4">
+              <div
+                className="bg-yellow-600 h-2 rounded-full transition-all duration-1000"
+                style={{
+                  width: `${((phases[currentPhaseIndex].duration - timeLeft) / phases[currentPhaseIndex].duration) * 100}%`
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Controlli */}
+        <div className="flex justify-center gap-4 mb-6">
+          {currentPhaseIndex === -1 ? (
+            <button
+              onClick={startMeditation}
+              disabled={!audioFile}
+              className="bg-yellow-700 hover:bg-yellow-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-amber-50 rounded-full p-6 transition-all shadow-lg"
+            >
+              <Play className="w-8 h-8" fill="currentColor" />
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={togglePause}
+                className="bg-yellow-700 hover:bg-yellow-600 text-amber-50 rounded-full p-6 transition-all shadow-lg"
+              >
+                {isRunning ? <Pause className="w-8 h-8" fill="currentColor" /> : <Play className="w-8 h-8" fill="currentColor" />}
+              </button>
+              <button
+                onClick={skipPhase}
+                disabled={currentPhaseIndex >= phases.length - 1}
+                className="bg-orange-800 hover:bg-orange-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-amber-50 rounded-full p-6 transition-all shadow-lg"
+              >
+                <SkipForward className="w-8 h-8" />
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="bg-red-900 hover:bg-red-800 text-amber-50 rounded-full p-6 transition-all shadow-lg"
+          >
+            <Settings className="w-8 h-8" />
+          </button>
+        </div>
+
+        {currentPhaseIndex >= 0 && (
+          <button
+            onClick={resetMeditation}
+            className="w-full bg-red-900/40 hover:bg-red-900/60 text-amber-100 py-3 rounded-lg transition-all border border-red-800/50"
+          >
+            Ricomincia da capo
+          </button>
+        )}
+
+        {/* Impostazioni */}
+        {showSettings && currentPhaseIndex === -1 && (
+          <div className="mt-6 bg-amber-950/30 rounded-xl p-6 border border-yellow-800/30">
+            <h3 className="text-xl font-semibold text-amber-50 mb-4">Configura le fasi</h3>
+            <div className="space-y-3">
+              {phases.map(phase => (
+                <div key={phase.id} className="flex items-center justify-between bg-amber-900/30 p-3 rounded-lg border border-yellow-800/20">
+                  <span className="text-amber-100 flex-1">{phase.name}</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={Math.floor(phase.duration / 60)}
+                      onChange={(e) => updatePhaseDuration(phase.id, parseInt(e.target.value) * 60)}
+                      className="w-16 bg-amber-950/50 text-amber-50 rounded px-2 py-1 text-center border border-yellow-800/30"
+                      min="0"
+                    />
+                    <span className="text-amber-200 text-sm">min</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Audio nascosto */}
+        <audio ref={audioRef} src={audioUrl || ''} />
+      </div>
+    </div>
+  );
+};
+      return (
+        <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 text-amber-50 text-center">
+          <h1 className="text-4xl mb-4">Meditazione Quotidiana</h1>
+          <p>Timer funzionante in HTML standalone!</p>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<MeditationTimer />);
+
+  </script>
+</body>
+</html>
